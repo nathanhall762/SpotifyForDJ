@@ -7,13 +7,39 @@ if (!code) {
 } else {
     const accessToken = await getAccessToken(clientId, code);
     const profile = await fetchProfile(accessToken);
-    console.log("Profile info: " + JSON.stringify(profile)); // Profile data logs to console
     populateUI(profile);
     const allTracks = await fetchTracks(accessToken);
-    console.log("All Tracks: " + JSON.stringify(allTracks)); // Track data logs to console
+    const allTrackObjects = jsonToObjects(allTracks);
     console.log("Size of allTracks (in bytes) " + JSON.stringify(allTracks).length);
     makeTableHeaderRow();
-    addSongRows(allTracks)
+    renderTable(allTrackObjects, accessToken)
+    // Add click event handlers to the table headers
+    $('#trackTable th').on('click', function (accessToken) {
+        const columnIndex = $(this).index(); // Get the index of the clicked column
+
+        // Retrieve the track objects from the table
+        const trackObjects = jsonToObjects1($('#trackTableBody').find('tr'));
+        console.log(JSON.stringify(trackObjects)); // output: []
+
+        // Sort the track objects based on the selected column
+        trackObjects.sort((a, b) => {
+            // Access the values in the track objects based on the selected column
+            const valueA = a[Object.keys(a)[columnIndex]];
+            const valueB = b[Object.keys(b)[columnIndex]];
+
+            // Compare the values and return the result for sorting
+            if (typeof valueA === 'string') {
+                return valueA.localeCompare(valueB); // Sort strings alphabetically
+            } else {
+                return valueA - valueB; // Sort numbers in ascending order
+            }
+        });
+
+        console.log(JSON.stringify(trackObjects));
+
+        // Re-render the table with sorted data
+        renderTable(trackObjects, accessToken);
+    });
 }
 
 export async function redirectToAuthCodeFlow(clientId) {
@@ -81,6 +107,19 @@ async function fetchProfile(token) {
     return await result.json();
 }
 
+function populateUI(profile) {
+    $('#displayName').text(profile.display_name);
+    if (profile.images[0]) {
+        const profileImage = $('<img>').attr('src', profile.images[0].url).attr('width', 200).attr('height', 200);
+        $('#avatar').append(profileImage);
+        $('#imgUrl').text(profile.images[0].url);
+    }
+    $('#id').text(profile.id);
+    $('#email').text(profile.email);
+    $('#uri').text(profile.uri).attr('href', profile.external_urls.spotify);
+    $('#url').text(profile.href).attr('href', profile.href);
+}
+
 async function fetchTracks(token) {
     let allTracks = [];
     let offset = 0;
@@ -105,20 +144,39 @@ async function fetchTracks(token) {
     return allTracks;
 }
 
+function jsonToObjects(allTracks) {
+    const tracks = [];
 
-function populateUI(profile) {
-    $('#displayName').text(profile.display_name);
-    if (profile.images[0]) {
-        const profileImage = $('<img>').attr('src', profile.images[0].url).attr('width', 200).attr('height', 200);
-        $('#avatar').append(profileImage);
-        $('#imgUrl').text(profile.images[0].url);
+    for (let i = 0; i < allTracks.length; i++) {
+        const jsonTrack = allTracks[i];
+        const { added_at, track } = jsonTrack;
+        const { album, artists, name, duration_ms, popularity, preview_url, id } = track;
+
+        const artistObjects = [];
+        for (let j = 0; j < artists.length; j++) {
+            const artist = artists[j];
+            artistObjects.push({
+                name: artist.name,
+                id: artist.id
+            });
+        }
+
+        const trackObj = {
+            added_at,
+            album,
+            artists: artistObjects,
+            name,
+            duration_ms,
+            popularity,
+            preview_url,
+            id
+        };
+
+        tracks.push(trackObj);
     }
-    $('#id').text(profile.id);
-    $('#email').text(profile.email);
-    $('#uri').text(profile.uri).attr('href', profile.external_urls.spotify);
-    $('#url').text(profile.href).attr('href', profile.href);
-}
 
+    return tracks;
+}
 
 // Add Table Header Row
 function makeTableHeaderRow() {
@@ -131,8 +189,17 @@ function makeTableHeaderRow() {
 			<th>Duration</th>
 			<th>Popularity</th>
 			<th>Preview URL</th>
-			<th>Spotify URL</th>
-			<th>Track ID</th>
+            <th>Acousticness</th>
+            <th>Danceability</th>
+            <th>Energy</th>
+            <th>Instrumentalness</th>
+            <th>Key</th>
+            <th>Liveness</th>
+            <th>Loudness</th>
+            <th>Speechiness</th>
+            <th>Tempo</th>
+            <th>Time Signature</th>
+            <th>Valence</th>
             </tr>
             </thead>
             <tbody id=trackTableBody></tbody>
@@ -141,46 +208,110 @@ function makeTableHeaderRow() {
 }
 
 // Add Song Rows
-function addSongRows(tracks) {
-    class Track {
-        constructor(name, artists, durationMs, popularity, previewUrl, externalUrl, id) {
-            this.name = name;
-            this.artists = artists;
-            this.durationMs = durationMs;
-            this.popularity = popularity;
-            this.previewUrl = previewUrl;
-            this.externalUrl = externalUrl;
-            this.id = id;
+function addSongRows(allTrackObjects, targetElement) {
+    for (const trackObject of allTrackObjects) {
+        const artistList = [];
+        if (trackObject.artists && Array.isArray(trackObject.artists)) {
+            for (const artist of trackObject.artists) {
+                artistList.push(artist.name);
+            }
         }
-    
-        getArtistNames() {
-            return this.artists.map(artist => artist.name).join(", ");
-        }
+        $(targetElement).append(`
+        <tr id="${trackObject.id}">
+        <td>${trackObject.name}</td>
+        <td>${artistList.join(', ')}</td>
+        <td>${trackObject.duration_ms}</td>
+        <td>${trackObject.popularity}</td>
+        <td><a href="${trackObject.preview_url}">Play Song</a></td>
+        </tr>
+      `);
     }
-	let idList = [];
-	for (const trackItem of tracks) {
-		var song = new Track(
-			trackItem.track.name,
-			trackItem.track.artists,
-			trackItem.track.duration_ms,
-			trackItem.track.popularity,
-			trackItem.track.preview_url,
-			trackItem.track.external_urls.spotify,
-			trackItem.track.id
-		);
-		$('#trackTableBody').append(`
-		<tr id="${song.id}">
-		<td>${song.name}</td>
-		<td>${song.getArtistNames()}</td>
-		<td>${song.durationMs}</td>
-		<td>${song.popularity}</td>
-		<td><a href="${song.previewUrl}">Play Song</a></td>
-		<td><a href="${song.externalUrl}" target="_blank">Go To Song</a></td>
-		<td>${song.id}</td>
-		</tr>
-		`);
-		idList.push(song.id);
-	}
-	console.log(idList);
-	return idList; // returns list of all song IDs
+}
+
+// Function to render the table with updated data
+function renderTable(trackObjects, accessToken) {
+    console.log('rendering table...');
+    const tableBody = $('#trackTableBody');
+    tableBody.empty(); // Clear the table body
+
+    // Re-add the song rows using the modified addSongRows function
+    addSongRows(trackObjects, tableBody);
+    addAudioFeaturesToTable(accessToken, trackObjects);
+    console.log('table rendered successfully');
+}
+
+// Get Audio Features
+async function fetchAudioFeatures(token, trackIds) {
+    const audioFeatures = [];
+
+    // Split the track IDs into chunks of 100
+    const chunks = [];
+    while (trackIds.length) {
+        chunks.push(trackIds.splice(0, 100));
+    }
+
+    // Fetch audio features for each chunk of track IDs
+    for (const chunk of chunks) {
+        const response = await fetch(
+            `https://api.spotify.com/v1/audio-features/?ids=${chunk.join(',')}`,
+            {
+                method: 'GET',
+                headers: { Authorization: `Bearer ${token}` },
+            }
+        );
+        const data = await response.json();
+        audioFeatures.push(...data.audio_features);
+    }
+
+    return audioFeatures;
+}
+
+// Add audio features to table
+async function addAudioFeaturesToTable(token, trackObjects) {
+    const trackIds = trackObjects.map(track => track.id);
+    console.log(trackIds);
+    const audioFeatures = await fetchAudioFeatures(token, trackIds);
+    console.log(audioFeatures);
+
+    for (let i = 0; i < trackObjects.length; i++) {
+        const trackObject = trackObjects[i];
+        const audioFeature = audioFeatures[i];
+
+        $('#trackTableBody').find(`#${trackObject.id}`).append(`
+        <td>${audioFeature.acousticness}</td>
+        <td>${audioFeature.danceability}</td>
+        <td>${audioFeature.energy}</td>
+        <td>${audioFeature.instrumentalness}</td>
+        <td>${audioFeature.key}</td>
+        <td>${audioFeature.liveness}</td>
+        <td>${audioFeature.loudness}</td>
+        <td>${audioFeature.speechiness}</td>
+        <td>${audioFeature.tempo}</td>
+        <td>${audioFeature.time_signature}</td>
+        <td>${audioFeature.valence}</td>
+      `);
+    }
+}
+
+function jsonToObjects1(trElements) {
+    const tracks = [];
+
+    trElements.each(function () {
+        const trackObject = {};
+        $(this)
+            .find('td')
+            .each(function (index) {
+                const columnIndex = index; // Get the index of the column
+
+                // Access the values directly based on the column index
+                const value = $(this).text().trim();
+
+                // Add the value to the track object
+                trackObject[columnIndex] = value;
+            });
+
+        tracks.push(trackObject);
+    });
+
+    return tracks;
 }
