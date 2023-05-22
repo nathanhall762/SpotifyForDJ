@@ -8,38 +8,45 @@ if (!code) {
     const accessToken = await getAccessToken(clientId, code);
     const profile = await fetchProfile(accessToken);
     populateUI(profile);
-    const allTracks = await fetchTracks(accessToken);
-    const allTrackObjects = jsonToObjects(allTracks);
+    let allTracks = await fetchTracks(accessToken);
+    allTracks = jsonToObjects(allTracks);
     console.log("Size of allTracks (in bytes) " + JSON.stringify(allTracks).length);
-    const audioFeatures = renderTable(allTrackObjects, accessToken)
+    allTracks = await renderTable(allTracks, accessToken)
+    console.log("allTracks is a " + typeof(allTrack));
+    console.log(allTracks);
 
     // Add click event handlers to the table headers
-    $('#trackTable th').on('click', function () {
-        const columnIndex = $(this).index(); // Get the index of the clicked column
+$('#trackTable th').on('click', function () {
+    const columnIndex = $(this).closest('th').index() + 3; // Get the index of the clicked column
 
-        // Retrieve the track objects from the table
-        const trackObjects = jsonToObjects1($('#trackTableBody').find('tr'));
-        console.log(JSON.stringify(trackObjects));
+    // Retrieve the track object ids from the table
+    const workingIds = $('#trackTableBody').find('tr').map(function () {
+        return $(this).attr('id');
+    }).get();
 
-        // Sort the track objects based on the selected column
-        trackObjects.sort((a, b) => {
-            // Access the values in the track objects based on the selected column
-            const valueA = a[Object.keys(a)[columnIndex]];
-            const valueB = b[Object.keys(b)[columnIndex]];
+    // Build an array of track objects from allTracks whose ids match workingIds and assign to workingTracks
+    const workingTracks = allTracks.filter(track => workingIds.includes(track.id));
 
-            // Compare the values and return the result for sorting
-            if (typeof valueA === 'string') {
-                return valueA.localeCompare(valueB); // Sort strings alphabetically
-            } else {
-                return valueA - valueB; // Sort numbers in ascending order
-            }
-        });
+    // Sort the track objects based on the selected column
+    workingTracks.sort((a, b) => {
+        // Access the values in the track objects based on the selected column
+        const valueA = a[Object.keys(a)[columnIndex]];
+        const valueB = b[Object.keys(b)[columnIndex]];
 
-        console.log(JSON.stringify(trackObjects));
-
-        // Re-render the table with sorted data
-        rerenderTable(trackObjects, audioFeatures)
+        // Compare the values and return the result for sorting
+        if (typeof valueA === 'string') {
+            return valueA.localeCompare(valueB); // Sort strings alphabetically
+        } else {
+            return valueA - valueB; // Sort numbers in ascending order
+        }
     });
+
+    console.log(workingTracks);
+
+    // Re-render the table with sorted data
+    rerenderTable(workingTracks);
+});
+
 }
 
 export async function redirectToAuthCodeFlow(clientId) {
@@ -175,41 +182,43 @@ function jsonToObjects(allTracks) {
         tracks.push(trackObj);
     }
 
+    console.log(tracks);
     return tracks;
 }
 
 // Add Table Header Row
 function makeTableHeaderRow() {
     $('#TrackInfoSection').append(`
-	<table id="trackTable">
-    <thead>
-    <tr>
-    <th>Track Title</th>
-			<th>Artist Name(s)</th>
-			<th>Duration</th>
-			<th>Popularity</th>
-			<th>Preview URL</th>
-            <th>Acousticness</th>
-            <th>Danceability</th>
-            <th>Energy</th>
-            <th>Instrumentalness</th>
-            <th>Key</th>
-            <th>Liveness</th>
-            <th>Loudness</th>
-            <th>Speechiness</th>
-            <th>Tempo</th>
-            <th>Time Signature</th>
-            <th>Valence</th>
-            </tr>
+        <table id="trackTable">
+            <thead>
+                <tr>
+                    <th>Track Title</th>
+                    <th>Artist Name(s)</th>
+                    <th>Duration (ms)</th>
+                    <th>Popularity</th>
+                    <th>Preview URL</th>
+                    <th>Acousticness</th>
+                    <th>Danceability</th>
+                    <th>Energy</th>
+                    <th>Instrumentalness</th>
+                    <th>Key</th>
+                    <th>Liveness</th>
+                    <th>Loudness</th>
+                    <th>Speechiness</th>
+                    <th>Tempo</th>
+                    <th>Time Signature</th>
+                    <th>Valence</th>
+                </tr>
             </thead>
-            <tbody id=trackTableBody></tbody>
-	</table>
-	`);
+            <tbody id="trackTableBody"></tbody>
+        </table>
+    `);
 }
 
+
 // Add Song Rows
-function addSongRows(allTrackObjects, targetElement) {
-    for (const trackObject of allTrackObjects) {
+function addSongRows(tracks, targetElement) {
+    for (const trackObject of tracks) {
         const artistList = [];
         if (trackObject.artists && Array.isArray(trackObject.artists)) {
             for (const artist of trackObject.artists) {
@@ -223,37 +232,63 @@ function addSongRows(allTrackObjects, targetElement) {
         <td>${trackObject.duration_ms}</td>
         <td>${trackObject.popularity}</td>
         <td><a href="${trackObject.preview_url}">Play Song</a></td>
+        <td>${trackObject.acousticness}</td>
+        <td>${trackObject.danceability}</td>
+        <td>${trackObject.energy}</td>
+        <td>${trackObject.instrumentalness}</td>
+        <td>${trackObject.key}</td>
+        <td>${trackObject.liveness}</td>
+        <td>${trackObject.loudness}</td>
+        <td>${trackObject.speechiness}</td>
+        <td>${trackObject.tempo}</td>
+        <td>${trackObject.time_signature}</td>
+        <td>${trackObject.valence}</td>
         </tr>
       `);
     }
 }
 
-// Function to render the table with initial full dataset
+// Function to render the table with initial full dataset and assign audio features to track objects
 async function renderTable(trackObjects, accessToken) {
     console.log('rendering table...');
     makeTableHeaderRow();
     const tableBody = $('#trackTableBody');
     tableBody.empty(); // Clear the table body
 
-    // Re-add the song rows using the modified addSongRows function
-    addSongRows(trackObjects, tableBody);
+    // Fetch audio features using trackObject ids
     const trackIds = trackObjects.map(track => track.id);
     const audioFeatures = await fetchAudioFeatures(accessToken, trackIds);
-    console.log(audioFeatures);
-    addAudioFeaturesToTable(trackObjects, audioFeatures);
+    // Add audio features to corresponding track objects
+    trackObjects.forEach(trackObj => {
+        const audioFeature = audioFeatures.find(feature => feature.id === trackObj.id);
+        if (audioFeature) {
+            // Add audio feature properties to track object
+            trackObj.acousticness = audioFeature.acousticness;
+            trackObj.danceability = audioFeature.danceability;
+            trackObj.energy = audioFeature.energy;
+            trackObj.instrumentalness = audioFeature.instrumentalness;
+            trackObj.key = audioFeature.key;
+            trackObj.liveness = audioFeature.liveness;
+            trackObj.loudness = audioFeature.loudness;
+            trackObj.speechiness = audioFeature.speechiness;
+            trackObj.tempo = audioFeature.tempo;
+            trackObj.time_signature = audioFeature.time_signature;
+            trackObj.valence = audioFeature.valence;
+        }
+    });
+    console.log(typeof(trackObjects));
+    await addSongRows(trackObjects, tableBody);
     console.log('table rendered successfully');
-    return audioFeatures;
+    return trackObjects;
 }
 
 // Function to rerender the table with updated data
-function rerenderTable(trackObjects, audioFeatures) {
+function rerenderTable(trackObjects) {
     console.log('re-rendering table...');
     const tableBody = $('#trackTableBody');
     tableBody.empty(); // Clear the table body
 
-    // Re-add the song rows using the modified addSongRows function
     addSongRows(trackObjects, tableBody);
-    addAudioFeaturesToTable(trackObjects, audioFeatures);
     console.log('table re-rendered successfully');
 }
 
@@ -281,51 +316,4 @@ async function fetchAudioFeatures(token, trackIds) {
     }
 
     return audioFeatures;
-}
-
-// Add audio features to table
-async function addAudioFeaturesToTable(trackObjects, audioFeatures) {
-    
-
-    for (let i = 0; i < trackObjects.length; i++) {
-        const trackObject = trackObjects[i];
-        const audioFeature = audioFeatures[i];
-
-        $('#trackTableBody').find(`#${trackObject.id}`).append(`
-        <td>${audioFeature.acousticness}</td>
-        <td>${audioFeature.danceability}</td>
-        <td>${audioFeature.energy}</td>
-        <td>${audioFeature.instrumentalness}</td>
-        <td>${audioFeature.key}</td>
-        <td>${audioFeature.liveness}</td>
-        <td>${audioFeature.loudness}</td>
-        <td>${audioFeature.speechiness}</td>
-        <td>${audioFeature.tempo}</td>
-        <td>${audioFeature.time_signature}</td>
-        <td>${audioFeature.valence}</td>
-      `);
-    }
-}
-
-function jsonToObjects1(trElements) {
-    const tracks = [];
-
-    trElements.each(function () {
-        const trackObject = {};
-        $(this)
-            .find('td')
-            .each(function (index) {
-                const columnIndex = index; // Get the index of the column
-
-                // Access the values directly based on the column index
-                const value = $(this).text().trim();
-
-                // Add the value to the track object
-                trackObject[columnIndex] = value;
-            });
-
-        tracks.push(trackObject);
-    });
-
-    return tracks;
 }
