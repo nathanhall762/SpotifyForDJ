@@ -11,15 +11,15 @@ if (!code) {
     const allTracks = await fetchTracks(accessToken);
     const allTrackObjects = jsonToObjects(allTracks);
     console.log("Size of allTracks (in bytes) " + JSON.stringify(allTracks).length);
-    makeTableHeaderRow();
-    renderTable(allTrackObjects, accessToken)
+    const audioFeatures = renderTable(allTrackObjects, accessToken)
+
     // Add click event handlers to the table headers
-    $('#trackTable th').on('click', function (accessToken) {
+    $('#trackTable th').on('click', function () {
         const columnIndex = $(this).index(); // Get the index of the clicked column
 
         // Retrieve the track objects from the table
         const trackObjects = jsonToObjects1($('#trackTableBody').find('tr'));
-        console.log(JSON.stringify(trackObjects)); // output: []
+        console.log(JSON.stringify(trackObjects));
 
         // Sort the track objects based on the selected column
         trackObjects.sort((a, b) => {
@@ -38,7 +38,7 @@ if (!code) {
         console.log(JSON.stringify(trackObjects));
 
         // Re-render the table with sorted data
-        renderTable(trackObjects, accessToken);
+        rerenderTable(trackObjects, audioFeatures)
     });
 }
 
@@ -228,16 +228,33 @@ function addSongRows(allTrackObjects, targetElement) {
     }
 }
 
-// Function to render the table with updated data
-function renderTable(trackObjects, accessToken) {
+// Function to render the table with initial full dataset
+async function renderTable(trackObjects, accessToken) {
     console.log('rendering table...');
+    makeTableHeaderRow();
     const tableBody = $('#trackTableBody');
     tableBody.empty(); // Clear the table body
 
     // Re-add the song rows using the modified addSongRows function
     addSongRows(trackObjects, tableBody);
-    addAudioFeaturesToTable(accessToken, trackObjects);
+    const trackIds = trackObjects.map(track => track.id);
+    const audioFeatures = await fetchAudioFeatures(accessToken, trackIds);
+    console.log(audioFeatures);
+    addAudioFeaturesToTable(trackObjects, audioFeatures);
     console.log('table rendered successfully');
+    return audioFeatures;
+}
+
+// Function to rerender the table with updated data
+function rerenderTable(trackObjects, audioFeatures) {
+    console.log('re-rendering table...');
+    const tableBody = $('#trackTableBody');
+    tableBody.empty(); // Clear the table body
+
+    // Re-add the song rows using the modified addSongRows function
+    addSongRows(trackObjects, tableBody);
+    addAudioFeaturesToTable(trackObjects, audioFeatures);
+    console.log('table re-rendered successfully');
 }
 
 // Get Audio Features
@@ -267,11 +284,8 @@ async function fetchAudioFeatures(token, trackIds) {
 }
 
 // Add audio features to table
-async function addAudioFeaturesToTable(token, trackObjects) {
-    const trackIds = trackObjects.map(track => track.id);
-    console.log(trackIds);
-    const audioFeatures = await fetchAudioFeatures(token, trackIds);
-    console.log(audioFeatures);
+async function addAudioFeaturesToTable(trackObjects, audioFeatures) {
+    
 
     for (let i = 0; i < trackObjects.length; i++) {
         const trackObject = trackObjects[i];
