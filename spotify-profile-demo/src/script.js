@@ -5,48 +5,184 @@ const code = params.get("code");
 if (!code) {
     redirectToAuthCodeFlow(clientId);
 } else {
-    const accessToken = await getAccessToken(clientId, code);
-    const profile = await fetchProfile(accessToken);
-    populateUI(profile);
-    let allTracks = await fetchTracks(accessToken);
-    allTracks = jsonToObjects(allTracks);
-    console.log("Size of allTracks (in bytes) " + JSON.stringify(allTracks).length);
-    allTracks = await renderTable(allTracks, accessToken)
-    console.log("allTracks is a " + typeof(allTrack));
-    console.log(allTracks);
+    main(clientId, code);
+}
 
-    // Add click event handlers to the table headers
-$('#trackTable th').on('click', function () {
-    const columnIndex = $(this).closest('th').index() + 3; // Get the index of the clicked column
+async function main(clientId, code) {
+    const Tokens = await getAccessToken(clientId, code);
+    const accessToken = Tokens.access_token;
+    const refreshToken =Tokens.refresh_token;
 
-    // Retrieve the track object ids from the table
-    const workingIds = $('#trackTableBody').find('tr').map(function () {
-        return $(this).attr('id');
-    }).get();
 
-    // Build an array of track objects from allTracks whose ids match workingIds and assign to workingTracks
-    const workingTracks = allTracks.filter(track => workingIds.includes(track.id));
+    // const profile = await fetchProfile(accessToken);
+    // populateUI(profile);
+    // let allTracks = await fetchTracks(accessToken);
+    // allTracks = jsonToObjects(allTracks);
+    // allTracks = await renderTable(allTracks, accessToken)
+    // console.log("Size of allTracks (in bytes) " + JSON.stringify(allTracks).length);
+    // console.log("allTracks is a " + typeof (allTrack));
+    // console.log(allTracks);
+    // startPlayback(accessToken);
+    
+    
+    // // Add click event handlers to the table headers
+    // $('#trackTable th').on('click', function () {
+    //     const columnIndex = $(this).closest('th').index() + 3; // Get the index of the clicked column
+    //     console.log(columnIndex);
+    
+    //     // Retrieve the track object ids from the table
+    //     const workingIds = $('#trackTableBody').find('tr').map(function () {
+    //         return $(this).attr('id');
+    //     }).get();
+    
+    //     // Build an array of track objects from allTracks whose ids match workingIds and assign to workingTracks
+    //     const workingTracks = allTracks.filter(track => workingIds.includes(track.id));
+    
+    //     // Toggle the sorting direction between ascending and descending
+    //     const currentSortOrder = $(this).data('sort-order') || 'asc';
+    //     const newSortOrder = currentSortOrder === 'asc' ? 'desc' : 'asc';
+    //     $(this).data('sort-order', newSortOrder);
+    
+    //     // Sort the track objects based on the selected column and sort order
+    //     workingTracks.sort((a, b) => {
+    //         // Access the values in the track objects based on the selected column
+    //         const valueA = a[Object.keys(a)[columnIndex]];
+    //         const valueB = b[Object.keys(b)[columnIndex]];
+    
+    //         // Compare the values and return the result for sorting
+    //         let comparison = 0;
+    //         if (typeof valueA === 'string') {
+    //             comparison = valueA.localeCompare(valueB); // Sort strings alphabetically
+    //         } else {
+    //             comparison = valueA - valueB; // Sort numbers in ascending order
+    //         }
+    
+    //         // Reverse the sort order if descending
+    //         if (newSortOrder === 'desc') {
+    //             comparison *= -1;
+    //         }
+    
+    //         return comparison;
+    //     });
+    
+    //     // Re-render the table with sorted data
+    //     rerenderTable(workingTracks);
+    //     console.log("Size of allTracks (in bytes) " + JSON.stringify(allTracks).length);
+    //     console.log("allTracks is a " + typeof (allTrack));
+    //     console.log(allTracks);
+    // });
+    
+    const playlist_id = '2E38zwRmBqdnuxgpGqE78i'
+    songRipper(playlist_id, accessToken, refreshToken);
+}
 
-    // Sort the track objects based on the selected column
-    workingTracks.sort((a, b) => {
-        // Access the values in the track objects based on the selected column
-        const valueA = a[Object.keys(a)[columnIndex]];
-        const valueB = b[Object.keys(b)[columnIndex]];
-
-        // Compare the values and return the result for sorting
-        if (typeof valueA === 'string') {
-            return valueA.localeCompare(valueB); // Sort strings alphabetically
-        } else {
-            return valueA - valueB; // Sort numbers in ascending order
+async function songRipper(playlist_id, accessToken, refreshToken) {
+    try {
+        let songIDs = await IDsFromPlaylist(playlist_id, accessToken);
+        for (let id of songIDs) {
+            accessToken = await refreshAccessToken(clientId, refreshToken);
+            console.log(accessToken);
+            let song_info = await getSongInformation(id, accessToken);
+            let duration = song_info.duration_ms;
+            startPlayback(id, accessToken);
+            await wait(duration);
+            await wait(10000);
+            // await recordSong(duration);
+            // stopPlayback(access_token);
+            // let track = createTrack();
+            // addMetadataToTrack(song_info, track);
+            // await exportTrack(track, target_directory);
         }
+    } catch (error) {
+        // Handle the error here
+        console.error("An error occurred:", error.message);
+    }
+}
+
+function wait(ms) {
+    return new Promise((resolve) => {
+        setTimeout(resolve, ms);
     });
+}
 
-    console.log(workingTracks);
+// IDsFromPlaylist function (playlist_id: string, access_token: string): string[]
+async function IDsFromPlaylist(playlist_id, access_token) {
+    try {
+        let playlist_info = await getPlaylistInformation(playlist_id, access_token);
+        let songIDs = [];
+        for (let item of playlist_info.tracks.items) {
+            songIDs.push(item.track.id);
+        }
+        return songIDs;
+    } catch (error) {
+        // Handle the error here
+        console.error("An error occurred:", error.message);
+        return [];
+    }
+}
 
-    // Re-render the table with sorted data
-    rerenderTable(workingTracks);
-});
+// getPlaylistInformation function (playlist_id: string, access_token: string): PlaylistInformation
+async function getPlaylistInformation(playlist_id, access_token) {
+    console.log(`Access token: ${access_token}`);
+    try {
+        const response = await fetch(`https://api.spotify.com/v1/playlists/${playlist_id}`, {
+            headers: {
+                Authorization: `Bearer ${access_token}`
+            }
+        });
 
+        if (response.ok) {
+            const playlistInfo = await response.json();
+            return playlistInfo;
+        } else {
+            throw new Error("Failed to fetch playlist information");
+        }
+    } catch (error) {
+        console.error("An error occurred:", error.message, response);
+        return null;
+    }
+}
+
+// getSongInformation function (song_id: string, access_token: string): SongInformation
+async function getSongInformation(song_id, access_token) {
+    try {
+        const response = await fetch(`https://api.spotify.com/v1/tracks/${song_id}`, {
+            headers: {
+                Authorization: `Bearer ${access_token}`
+            }
+        });
+        console.log(response);
+        if (response.ok) {
+            const songInfo = await response.json();
+            return songInfo;
+        } else {
+            throw new Error("Failed to fetch song information");
+        }
+    } catch (error) {
+        console.error("An error occurred:", error.message);
+        return null;
+    }
+}
+
+// startPlayback function (song_id: string, access_token: string):
+async function startPlayback(song_id, access_token) {
+    try {
+        const response = await fetch('https://api.spotify.com/v1/me/player/play', {
+            method: 'PUT',
+            headers: {
+                Authorization: `Bearer ${access_token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                uris: [`spotify:track:${song_id}`]
+            })
+        });
+
+        return response.ok;
+    } catch (error) {
+        console.error('An error occurred:', error.message);
+        return false;
+    }
 }
 
 export async function redirectToAuthCodeFlow(clientId) {
@@ -59,7 +195,7 @@ export async function redirectToAuthCodeFlow(clientId) {
     params.append("client_id", clientId);
     params.append("response_type", "code");
     params.append("redirect_uri", "http://localhost:5173/callback");
-    params.append("scope", "user-read-private user-read-email user-library-read");
+    params.append("scope", "user-read-private user-read-email user-library-read user-modify-playback-state");
     params.append("code_challenge_method", "S256");
     params.append("code_challenge", challenge);
 
@@ -102,7 +238,30 @@ export async function getAccessToken(clientId, code) {
         body: params
     });
 
+    const { access_token, refresh_token } = await result.json();
+    console.log(access_token);
+    console.log(refresh_token);
+    return { access_token, refresh_token };
+}
+
+export async function refreshAccessToken(clientId, refreshToken) {
+    const verifier = localStorage.getItem("verifier");
+
+    const params = new URLSearchParams();
+    params.append("grant_type", "refresh_token");
+    params.append("refresh_token", refreshToken);
+    params.append("client_id", clientId);
+    params.append("code_verifier", verifier);
+
+
+    const result = await fetch("https://accounts.spotify.com/api/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: params
+    });
+
     const { access_token } = await result.json();
+    console.log("access_token");
     return access_token;
 }
 
@@ -215,7 +374,6 @@ function makeTableHeaderRow() {
     `);
 }
 
-
 // Add Song Rows
 function addSongRows(tracks, targetElement) {
     for (const trackObject of tracks) {
@@ -231,7 +389,7 @@ function addSongRows(tracks, targetElement) {
         <td>${artistList.join(', ')}</td>
         <td>${trackObject.duration_ms}</td>
         <td>${trackObject.popularity}</td>
-        <td><a href="${trackObject.preview_url}">Play Song</a></td>
+        <td><button class="play-button" data-preview="${trackObject.preview_url}"></button></td>
         <td>${trackObject.acousticness}</td>
         <td>${trackObject.danceability}</td>
         <td>${trackObject.energy}</td>
@@ -246,6 +404,17 @@ function addSongRows(tracks, targetElement) {
         </tr>
       `);
     }
+    // Attach event listener to play buttons
+    $('.play-button').on('click', function () {
+        const previewUrl = $(this).data('preview');
+        playAudio(previewUrl);
+    });
+}
+
+function playAudio(previewUrl) {
+    const audioPlayer = document.getElementById('audioPlayer');
+    audioPlayer.src = previewUrl;
+    audioPlayer.play();
 }
 
 // Function to render the table with initial full dataset and assign audio features to track objects
@@ -276,7 +445,7 @@ async function renderTable(trackObjects, accessToken) {
             trackObj.valence = audioFeature.valence;
         }
     });
-    console.log(typeof(trackObjects));
+    console.log(typeof (trackObjects));
     await addSongRows(trackObjects, tableBody);
     console.log('table rendered successfully');
     return trackObjects;
@@ -317,3 +486,30 @@ async function fetchAudioFeatures(token, trackIds) {
 
     return audioFeatures;
 }
+
+// // Start playback on current device
+// async function startPlayback(accessToken) {
+//     const url = 'https://api.spotify.com/v1/me/player/play';
+//     const headers = {
+//         'Authorization': `Bearer ${accessToken}`,
+//         'Content-Type': 'application/json'
+//     };
+//     const data = {
+//         "context_uri": "spotify:album:5ht7ItJgpBH7W6vJ5BqpPr",
+//         "offset": {
+//             "position": 5
+//         },
+//         "position_ms": 0
+//     };
+
+//     try {
+//         const response = await fetch(url, {
+//             method: 'PUT',
+//             headers,
+//             body: JSON.stringify(data)
+//         });
+//         console.log('Playback started successfully.');
+//     } catch (error) {
+//         console.error('Error starting playback:', error);
+//     }
+// }

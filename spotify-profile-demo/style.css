@@ -116,3 +116,8 @@ td {
   justify-content: center;
   flex-direction: column;
 }
+
+.playButton {
+  height: 30px;
+  width: 30px;
+}
